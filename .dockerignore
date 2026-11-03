@@ -1,0 +1,13 @@
+node_modules
+npm-debug.log
+.git
+.github
+.tmp
+data
+test
+test-results
+playwright-report
+.env
+*.md
+playwright.config.js
+scripts
