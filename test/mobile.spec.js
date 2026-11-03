@@ -21,11 +21,11 @@ async function shot(page, name) {
   await copyFile(file, path.join(artifacts, `${name}.png`));
 }
 
-async function signIn(page) {
+async function openApp(page) {
   await page.goto('/');
-  await page.locator('#pin').fill('2468');
-  await page.locator('#login-button').click();
+  await expect(page.locator('#view-login')).toBeHidden();
   await expect(page.locator('#view-start')).toBeVisible();
+  await expect(page.locator('#sign-out')).toBeHidden();
 }
 
 async function chooseStockTake(page) {
@@ -46,7 +46,7 @@ test('photographs a stock take on a phone', async ({ page }) => {
   const labelA = path.join(root, '.tmp', 'fixtures', 'label-a.png');
   const labelB = path.join(root, '.tmp', 'fixtures', 'label-b.png');
 
-  await signIn(page);
+  await openApp(page);
   await chooseStockTake(page);
   const startButton = await page.locator('#start-button').boundingBox();
   const viewport = page.viewportSize();
@@ -102,7 +102,7 @@ test('falls back to the camera file input', async ({ page }) => {
     });
   });
   const label = path.join(root, '.tmp', 'fixtures', 'label-a.png');
-  await signIn(page);
+  await openApp(page);
   await chooseStockTake(page);
   await page.locator('#start-button').click();
   await expect(page.locator('#camera-fallback')).toBeVisible();
@@ -130,7 +130,7 @@ test('retries a photo after the connection drops', async ({ page }) => {
     await route.continue();
   });
   const label = path.join(root, '.tmp', 'fixtures', 'label-a.png');
-  await signIn(page);
+  await openApp(page);
   await page.locator('[data-location="Travel Pack"]').click();
   await page.locator('#staff-name').fill('Giulia');
   await page.locator('#start-button').click();

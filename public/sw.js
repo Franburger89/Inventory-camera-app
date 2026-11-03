@@ -1,4 +1,4 @@
-const CACHE = 'stocktake-shell-v2';
+const CACHE = 'stocktake-shell-v3';
 const ASSETS = [
   '/',
   '/styles.css',

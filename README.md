@@ -6,7 +6,7 @@ Built for iOS Safari and Android Chrome. No app-store install. Staff can add it 
 
 ## How a stock take works
 
-1. Staff open the site, enter the shared PIN, and choose a location. Person is optional (Eli, Anna, or Shared). Their name is remembered on that phone.
+1. Staff open the site and choose a location. There is no PIN unless `STAFF_PIN` is set. Person is optional (Eli, Anna, or Shared). Their name is remembered on that phone.
 2. **Start stock take** creates a session.
 3. Each tap of the shutter takes one photo with the rear camera. If the camera is blocked, **Take photo** uses the phone camera via the file picker. **Upload from camera roll** accepts many photos at once.
 4. Photos are resized on the phone (longest side about 1600px, JPEG quality 0.85), saved in IndexedDB, and uploaded in the background. A bad connection does not drop a photo. The screen shows queued, uploaded, and failed counts.
@@ -62,7 +62,7 @@ Default people: Eli, Anna, Shared.
 
 | Variable | Required | Purpose |
 | --- | --- | --- |
-| `STAFF_PIN` | yes | Shared PIN staff type on the phone. At least 4 characters. |
+| `STAFF_PIN` | no | Leave unset or empty and staff are not asked for a PIN. Set it (at least 4 characters) to require the shared PIN again. |
 | `ADMIN_TOKEN` | yes | Bearer token for the admin API. At least 8 characters. Use a long random value (`openssl rand -hex 24`). |
 | `DATA_DIR` | yes on Railway | Absolute directory for session folders. Use `/data` and mount the volume there. Locally it defaults to `./data`. |
 | `PORT` | set by Railway | HTTP port. Defaults to `3000` when unset. |
@@ -77,8 +77,10 @@ The camera needs a secure page. Railway domains are HTTPS. `http://localhost` is
 
 ```bash
 npm install
-STAFF_PIN=2468 ADMIN_TOKEN=local-admin-token npm start
+ADMIN_TOKEN=local-admin-token npm start
 ```
+
+To require a PIN as well, add `STAFF_PIN=2468` to that command.
 
 Open `http://localhost:3000`.
 
@@ -97,7 +99,6 @@ The container listens on `PORT`, writes to `DATA_DIR` (default `/data` in the im
 ```bash
 docker build -t stock-take .
 docker run --rm -p 3000:3000 \
-  -e STAFF_PIN=2468 \
   -e ADMIN_TOKEN=local-admin-token \
   -e DATA_DIR=/data \
   -v stocktake-data:/data \
@@ -114,17 +115,17 @@ One service, built from this GitHub repo with the Dockerfile. Photos must sit on
 
 1. In Railway, create a project and choose **Deploy from GitHub repo**. Select this repository. Railway builds `Dockerfile` (`railway.json` also selects the Dockerfile builder and sets the health check to `/health`).
 2. Open the service **Variables** and set:
-   - `STAFF_PIN` — the PIN staff will type
-   - `ADMIN_TOKEN` — the assistant's secret
+   - `ADMIN_TOKEN` — the assistant's secret. This is always required.
    - `DATA_DIR` — `/data`
    - `LOCATIONS` and `PEOPLE` only if the defaults should change
+   - Leave `STAFF_PIN` unset so staff are not asked for a PIN. Set it only if you want that screen back. If it is already set on a deployed service, delete the variable and redeploy.
    - Leave `PORT` unset. Railway injects it.
 3. Add a volume and attach it to this service. Set the **mount path** to `/data`, the same value as `DATA_DIR`.
    - From the project canvas: right-click, or open the command palette, choose the volume, then the service, and set the mount path.
    - Railway mounts the volume when the container starts, not during the image build, and mounts it as `root`. The entrypoint hands `/data` to the `node` user before the server starts.
    - If `DATA_DIR` is omitted, the app uses `RAILWAY_VOLUME_MOUNT_PATH` (set automatically by Railway). Set `DATA_DIR=/data` anyway so the path is explicit. A relative `./data` is **not** the volume; inside this image the working directory is `/app`, so `./data` would be ephemeral disk at `/app/data`.
-4. Deploy. The release is healthy when `/health` returns 200. If the log says `Missing required environment`, the PIN or admin token is unset.
-5. In the service **Networking** settings, generate a public domain. Open that HTTPS URL on a phone, sign in, and use **Add to Home Screen** for the full-screen app.
+4. Deploy. The release is healthy when `/health` returns 200. If the log says `Missing required environment`, `ADMIN_TOKEN` is missing, or `STAFF_PIN` is set but shorter than 4 characters.
+5. In the service **Networking** settings, generate a public domain. Open that HTTPS URL on a phone and use **Add to Home Screen** for the full-screen app.
 
 Redeploys keep the photos only while the volume stays mounted at `DATA_DIR`. Volume backups are available from the volume settings in Railway.
 
@@ -178,6 +179,6 @@ curl -s -X POST "$BASE/api/admin/sessions/SESSION_ID/processed" \
   -d '{"processed": true}'
 ```
 
-Staff routes (not used by the assistant): `POST /api/login` with `{"pin":"..."}`, `GET /api/config`, `POST /api/sessions`, `POST /api/sessions/:id/photos` (multipart field `photo` plus `client_id`, `captured_at`, `quantity`, `sequence`), and `POST /api/sessions/:id/finish`.
+Staff routes (not used by the assistant): `GET /api/me`, `GET /api/config`, `POST /api/sessions`, `POST /api/sessions/:id/photos` (multipart field `photo` plus `client_id`, `captured_at`, `quantity`, `sequence`), and `POST /api/sessions/:id/finish`. With no `STAFF_PIN`, these need no cookie. When `STAFF_PIN` is set, staff first `POST /api/login` with `{"pin":"..."}` and send the cookie. `GET /api/me` returns `{"ok": true, "pinRequired": false}` when the PIN is off.
 
 Suggested assistant loop: list `processed=false`, download each zip, read the labels, update Notion, then mark the session processed.

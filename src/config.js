@@ -44,10 +44,12 @@ export function loadEnvFile(file = path.resolve('.env')) {
 }
 
 export function configFromEnv(env = process.env) {
-  const staffPin = String(env.STAFF_PIN || '').trim();
+  const staffPin = String(env.STAFF_PIN ?? '').trim();
   const adminToken = String(env.ADMIN_TOKEN || '').trim();
   const missing = [];
-  if (staffPin.length < 4) missing.push('STAFF_PIN (at least 4 characters)');
+  if (staffPin && staffPin.length < 4) {
+    missing.push('STAFF_PIN must be at least 4 characters, or leave it unset');
+  }
   if (adminToken.length < 8) missing.push('ADMIN_TOKEN (at least 8 characters)');
   if (missing.length) {
     throw new Error(`Missing required environment: ${missing.join(', ')}`);
