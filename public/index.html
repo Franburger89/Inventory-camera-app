@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#1b4332">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="Stock take">
+    <meta name="description" content="Photograph household stock. One photo, one unit.">
+    <title>Stock take</title>
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/icons/icon-192.png" type="image/png">
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+    <link rel="stylesheet" href="/styles.css">
+  </head>
+  <body>
+    <div class="app">
+      <section id="view-login" class="view view-login" data-view="login">
+        <form id="login-form">
+          <p class="eyebrow">Household stock</p>
+          <h1>Stock take</h1>
+          <p class="lede">Photograph every unit. One photo is one item.</p>
+          <label for="pin">Staff PIN</label>
+          <div class="pin-row">
+            <input id="pin" name="pin" type="password" autocomplete="current-password" enterkeyhint="go" required>
+            <button type="button" id="pin-toggle" class="text-btn">Show</button>
+          </div>
+          <p id="login-error" class="form-error" role="alert"></p>
+          <button type="submit" id="login-button" class="btn btn-primary">Continue</button>
+        </form>
+      </section>
+
+      <section id="view-start" class="view view-start" data-view="start" hidden>
+        <form id="start-form" class="start-form">
+          <div class="start-bar">
+            <p class="eyebrow">New stock take</p>
+            <button type="button" id="sign-out" class="text-btn">Sign out</button>
+          </div>
+          <h1>Where are you counting?</h1>
+          <p id="pending-banner" class="banner" hidden></p>
+          <div id="resume-card" class="resume" hidden>
+            <p id="resume-copy"></p>
+            <button type="button" id="resume-button" class="btn btn-primary">Resume stock take</button>
+          </div>
+
+          <fieldset class="group">
+            <legend>Location</legend>
+            <div id="locations" class="stack"></div>
+          </fieldset>
+
+          <fieldset class="group">
+            <legend>Person <span class="optional">Optional</span></legend>
+            <div id="people" class="chips"></div>
+          </fieldset>
+
+          <label for="staff-name">Your name</label>
+          <input id="staff-name" name="staff" type="text" autocomplete="name" enterkeyhint="done" maxlength="80" placeholder="Remembered on this phone" required>
+          <p id="start-error" class="form-error" role="alert"></p>
+        </form>
+        <div class="start-footer">
+          <button type="submit" id="start-button" class="btn btn-primary" form="start-form" disabled>Start stock take</button>
+          <p class="hint install-hint">Add to Home Screen for the full-screen camera.</p>
+        </div>
+      </section>
+
+      <section id="view-capture" class="view view-capture" data-view="capture" hidden>
+        <div class="stage">
+          <video id="preview" autoplay playsinline muted></video>
+          <p id="camera-starting" class="camera-starting" hidden>Opening the camera…</p>
+          <div id="camera-fallback" class="camera-fallback" hidden>
+            <p id="camera-message">The camera is not available. You can still take a photo or upload from the camera roll.</p>
+            <button type="button" id="fallback-shutter" class="btn btn-light">Take photo</button>
+          </div>
+          <div id="flash" class="flash" aria-hidden="true"></div>
+          <img id="thumb" class="thumb" alt="" hidden>
+          <header class="cam-top">
+            <div>
+              <p id="capture-place" class="cam-place"></p>
+              <p id="capture-meta" class="cam-meta"></p>
+            </div>
+            <button type="button" id="finish-button" class="btn-quiet">Finish</button>
+          </header>
+          <button type="button" id="torch-button" class="torch" hidden aria-pressed="false">Light</button>
+          <div class="count-chip" aria-live="polite">
+            <span id="count">0</span>
+            <span class="count-label">photos</span>
+          </div>
+        </div>
+        <div class="dock">
+          <p id="offline" class="offline" hidden>No signal. Photos stay on this phone and upload when it returns.</p>
+          <p class="status" aria-live="polite">
+            <span><strong id="queued">0</strong> queued</span>
+            <span><strong id="uploaded">0</strong> uploaded</span>
+            <span><strong id="failed">0</strong> failed</span>
+          </p>
+          <div class="qty" role="group" aria-label="Quantity for the next shutter photo">
+            <button type="button" data-quantity="1" aria-pressed="true">1</button>
+            <button type="button" data-quantity="2" aria-pressed="false">×2</button>
+            <button type="button" data-quantity="3" aria-pressed="false">×3</button>
+            <button type="button" data-quantity="5" aria-pressed="false">×5</button>
+          </div>
+          <p class="qty-hint">Applies to the next photo you take. Camera roll stays at 1.</p>
+          <button type="button" id="shutter" aria-label="Take photo" hidden></button>
+          <button type="button" id="roll-button" class="text-btn on-dark">Upload from camera roll</button>
+          <button type="button" id="retry-button" class="text-btn on-dark" hidden>Retry failed uploads</button>
+        </div>
+        <div id="confirm" class="sheet" hidden>
+          <div class="sheet-card" role="dialog" aria-modal="true" aria-labelledby="confirm-title">
+            <h2 id="confirm-title">Finish this stock take?</h2>
+            <p id="confirm-copy"></p>
+            <button type="button" id="confirm-finish" class="btn btn-primary">Finish stock take</button>
+            <button type="button" id="confirm-cancel" class="btn btn-ghost">Keep going</button>
+          </div>
+        </div>
+        <input id="roll-input" type="file" accept="image/*" multiple hidden>
+        <input id="capture-input" type="file" accept="image/*" capture="environment" hidden>
+      </section>
+
+      <section id="view-summary" class="view view-summary" data-view="summary" hidden>
+        <div class="summary-body">
+          <p class="eyebrow">Closed</p>
+          <h1>Stock take closed</h1>
+          <p id="summary-place" class="summary-place"></p>
+          <p id="summary-meta" class="summary-meta"></p>
+          <div class="stats">
+            <div>
+              <p id="summary-photos" class="stat-value">0</p>
+              <p class="stat-label">Photos</p>
+            </div>
+            <div>
+              <p id="summary-quantity" class="stat-value">0</p>
+              <p class="stat-label">Total quantity</p>
+            </div>
+          </div>
+          <p id="summary-status" class="summary-status" aria-live="polite"></p>
+          <button type="button" id="summary-retry" class="btn btn-ghost" hidden>Retry failed uploads</button>
+        </div>
+        <div class="start-footer">
+          <button type="button" id="another-button" class="btn btn-primary">Start another</button>
+        </div>
+      </section>
+
+      <div id="toast" class="toast" hidden role="status"></div>
+    </div>
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
