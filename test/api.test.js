@@ -8,6 +8,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createApp } from '../src/app.js';
+import { configFromEnv } from '../src/config.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -35,7 +36,7 @@ async function withServer(fn, overrides = {}) {
   const dataDir = await mkdtemp(path.join(os.tmpdir(), 'stocktake-'));
   const app = createApp({
     dataDir,
-    staffPin: PIN,
+    staffPin: Object.hasOwn(overrides, 'staffPin') ? overrides.staffPin : PIN,
     adminToken: ADMIN,
     locations: overrides.locations || [
       '32 LRV',
@@ -107,6 +108,20 @@ async function upload(base, cookie, id, fields) {
   return { response, json };
 }
 
+describe('environment', () => {
+  test('STAFF_PIN is optional and ADMIN_TOKEN is not', () => {
+    const open = configFromEnv({ ADMIN_TOKEN: 'test-admin-token' });
+    assert.equal(open.staffPin, '');
+    const blank = configFromEnv({ ADMIN_TOKEN: 'test-admin-token', STAFF_PIN: '   ' });
+    assert.equal(blank.staffPin, '');
+    const set = configFromEnv({ ADMIN_TOKEN: 'test-admin-token', STAFF_PIN: '2468' });
+    assert.equal(set.staffPin, '2468');
+    assert.throws(() => configFromEnv({ ADMIN_TOKEN: 'test-admin-token', STAFF_PIN: '12' }), /STAFF_PIN/);
+    assert.throws(() => configFromEnv({ STAFF_PIN: '2468' }), /ADMIN_TOKEN/);
+    assert.throws(() => configFromEnv({}), /ADMIN_TOKEN/);
+  });
+});
+
 describe('stock take API', { concurrency: 1 }, () => {
   test('health does not require a PIN', async () => {
     await withServer(async ({ base }) => {
@@ -129,6 +144,9 @@ describe('stock take API', { concurrency: 1 }, () => {
       assert.equal(unauthenticated.status, 401);
 
       const { cookie } = await login(base);
+      const me = await fetch(`${base}/api/me`, { headers: { cookie } });
+      assert.equal(me.status, 200);
+      assert.deepEqual(await me.json(), { ok: true, pinRequired: true });
       const staffOnAdmin = await fetch(`${base}/api/admin/sessions`, { headers: { cookie } });
       assert.equal(staffOnAdmin.status, 401);
 
@@ -302,6 +320,54 @@ print(json.dumps({
       const unauthenticatedZip = await fetch(`${base}/api/admin/sessions/${session.id}/zip`);
       assert.equal(unauthenticatedZip.status, 401);
     });
+  });
+
+  test('lets staff work with no PIN, and still locks the admin API', async () => {
+    await withServer(async ({ base }) => {
+      const me = await fetch(`${base}/api/me`);
+      assert.equal(me.status, 200);
+      assert.deepEqual(await me.json(), { ok: true, pinRequired: false });
+
+      const login = await fetch(`${base}/api/login`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ pin: 'nope' }),
+      });
+      assert.equal(login.status, 200);
+      assert.equal(login.headers.get('set-cookie'), null);
+      assert.deepEqual(await login.json(), { ok: true, pinRequired: false });
+
+      const created = await createSession(base, '', {
+        location: '32 LRV',
+        person: 'Shared',
+        staff: 'Giulia',
+      });
+      assert.equal(created.response.status, 201);
+      const photo = await upload(base, '', created.json.id, {
+        clientId: 'open-mode-photo',
+        quantity: 5,
+        sequence: 1,
+      });
+      assert.equal(photo.response.status, 201);
+      assert.equal(photo.json.quantity, 5);
+
+      const manifest = await fetch(`${base}/api/sessions/${created.json.id}`);
+      assert.equal(manifest.status, 200);
+      assert.equal((await manifest.json()).photo_count, 1);
+
+      assert.equal((await fetch(`${base}/api/admin/sessions`)).status, 401);
+      assert.equal((await fetch(`${base}/api/admin/sessions`, {
+        headers: { authorization: 'Bearer not-the-token' },
+      })).status, 401);
+      const zip = await fetch(`${base}/api/admin/sessions/${created.json.id}/zip`);
+      assert.equal(zip.status, 401);
+
+      const allowed = await fetch(`${base}/api/admin/sessions/${created.json.id}`, {
+        headers: { authorization: `Bearer ${ADMIN}` },
+      });
+      assert.equal(allowed.status, 200);
+      assert.equal((await allowed.json()).photos[0].filename, '0001.jpg');
+    }, { staffPin: '' });
   });
 
   test('rejects an unknown location and a missing name', async () => {

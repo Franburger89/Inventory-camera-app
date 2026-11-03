@@ -3,6 +3,7 @@ import { enqueuePhoto, maxSequence, resumeQueue, retryFailed, startQueue, statsF
 const ACTIVE_KEY = 'stocktake.active';
 const STAFF_KEY = 'stocktake.staff';
 const FINISH_KEY = 'stocktake.pendingFinishes';
+const PIN_KEY = 'stocktake.pinRequired';
 const MAX_EDGE = 1600;
 const JPEG_QUALITY = 0.85;
 
@@ -23,6 +24,7 @@ const state = {
   stats: emptyStats(),
   global: emptyStats(),
   stream: null,
+  pinRequired: false,
   cameraState: 'starting',
   torchOn: false,
   torchSupported: false,
@@ -64,6 +66,19 @@ function readFinishes() {
 
 function writeFinishes(ids) {
   localStorage.setItem(FINISH_KEY, JSON.stringify([...new Set(ids)]));
+}
+
+function setPinRequired(required) {
+  state.pinRequired = Boolean(required);
+  localStorage.setItem(PIN_KEY, state.pinRequired ? '1' : '0');
+  $('#sign-out').hidden = !state.pinRequired;
+}
+
+function rememberedPinRequired() {
+  const value = localStorage.getItem(PIN_KEY);
+  if (value === '1') return true;
+  if (value === '0') return false;
+  return null;
 }
 
 function show(view) {
@@ -585,6 +600,7 @@ async function boot() {
       flushFinishes().catch(() => {});
     },
     onAuthRequired: () => {
+      if (!state.pinRequired) return;
       sessionEpoch += 1;
       showToast('Sign in again to finish uploading.');
       show('login');
@@ -594,17 +610,22 @@ async function boot() {
     const response = await fetch('/api/me');
     if (epoch !== sessionEpoch) return;
     if (response.status === 401) {
+      setPinRequired(true);
       show('login');
       $('#pin').focus();
       return;
     }
     if (!response.ok) throw new Error('unreachable');
+    const me = await response.json().catch(() => ({}));
+    setPinRequired(me.pinRequired === true);
     const ok = await loadConfig();
     if (epoch !== sessionEpoch) return;
     if (ok) await showStart();
   } catch {
     if (epoch !== sessionEpoch) return;
     const active = readActive();
+    const pinRequired = rememberedPinRequired();
+    if (pinRequired === false) setPinRequired(false);
     if (active && !active.finished) {
       showToast('No connection. Photos stay on this phone.');
       await enterCapture(active);
@@ -613,6 +634,11 @@ async function boot() {
     if (active?.finished) {
       showToast('No connection. Uploads will resume when it returns.');
       await showSummary(active);
+      return;
+    }
+    if (pinRequired === false) {
+      show('start');
+      showToast('No connection yet. Photos you have already taken stay on this phone.');
       return;
     }
     show('login');
@@ -639,6 +665,7 @@ $('#login-form').addEventListener('submit', async (event) => {
       return;
     }
     $('#pin').value = '';
+    setPinRequired(true);
     resumeQueue();
     const ok = await loadConfig();
     if (epoch !== sessionEpoch) return;

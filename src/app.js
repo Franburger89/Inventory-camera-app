@@ -37,10 +37,11 @@ function asyncRoute(fn) {
   };
 }
 
-export function createApp({ dataDir, staffPin, adminToken, locations, people }) {
-  if (!staffPin || !adminToken) {
-    throw new Error('staffPin and adminToken are required');
+export function createApp({ dataDir, staffPin = '', adminToken, locations, people }) {
+  if (!adminToken) {
+    throw new Error('adminToken is required');
   }
+  const pinRequired = Boolean(staffPin);
 
   const store = createStore(dataDir);
   const app = express();
@@ -108,6 +109,7 @@ export function createApp({ dataDir, staffPin, adminToken, locations, people }) 
   );
 
   function requireStaff(req, res, next) {
+    if (!pinRequired) return next();
     if (!verifyStaffCookie(staffPin, readCookie(req))) {
       return res.status(401).json({ error: 'Sign in required' });
     }
@@ -123,6 +125,9 @@ export function createApp({ dataDir, staffPin, adminToken, locations, people }) 
   }
 
   app.post('/api/login', (req, res) => {
+    if (!pinRequired) {
+      return res.json({ ok: true, pinRequired: false });
+    }
     const ip = clientIp(req);
     if (rateLimited(ip)) {
       return res.status(429).json({ error: 'Too many attempts. Wait a moment and try again.' });
@@ -135,7 +140,7 @@ export function createApp({ dataDir, staffPin, adminToken, locations, people }) 
     clearFailures(ip);
     const token = signStaffCookie(staffPin);
     res.setHeader('Set-Cookie', staffCookieHeader(token, { secure: requestIsSecure(req) }));
-    return res.json({ ok: true });
+    return res.json({ ok: true, pinRequired: true });
   });
 
   app.post('/api/logout', (req, res) => {
@@ -147,7 +152,7 @@ export function createApp({ dataDir, staffPin, adminToken, locations, people }) 
   });
 
   app.get('/api/me', requireStaff, (req, res) => {
-    res.json({ ok: true });
+    res.json({ ok: true, pinRequired });
   });
 
   app.get('/api/config', requireStaff, (req, res) => {
